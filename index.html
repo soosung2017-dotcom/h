@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>골프 머니 & 스트로크 계산기 (2~5인)</title>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 16px; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .names { margin-bottom: 10px; }
+    .names input { width: 90px; margin-right: 6px; }
+    table { border-collapse: collapse; width: 100%; max-width: 1200px; font-size: 12px; }
+    th, td { border: 1px solid #ccc; padding: 4px; text-align: center; }
+    th { background: #f0f0f0; }
+    input[type="number"] { width: 60px; }
+    .totals { margin-top: 12px; max-width: 900px; }
+    .totals td, .totals th { border: 1px solid #ccc; padding: 4px; text-align: center; }
+    .controls { margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .controls label { font-size: 12px; }
+    .note { font-size: 11px; color: #555; margin-top: 8px; line-height: 1.4; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body id="captureArea">
+
+<h1>골프 머니 & 스트로크 계산기 (2~5인, 자동 계산)</h1>
+
+<div class="row names">
+  <span>플레이어 수 :</span>
+  <select id="playerCount">
+    <option value="2">2명</option>
+    <option value="3">3명</option>
+    <option value="4" selected>4명</option>
+    <option value="5">5명</option>
+  </select>
+</div>
+
+<div class="row names">
+  <span>플레이어 이름 :</span>
+  <input id="name0" placeholder="Player 1" value="Player 1">
+  <input id="name1" placeholder="Player 2" value="Player 2">
+  <input id="name2" placeholder="Player 3" value="Player 3">
+  <input id="name3" placeholder="Player 4" value="Player 4">
+  <input id="name4" placeholder="Player 5" value="Player 5">
+</div>
+
+<div class="controls">
+  <label>기본 타당($):
+    <input type="number" id="baseStake" value="2" step="0.5">
+  </label>
+  <label>특수홀 배율(x):
+    <input type="number" id="rateMultiplier" value="2" step="0.5">
+  </label>
+  <label>버디 보너스($):
+    <input type="number" id="birdieBonus" value="5" step="1">
+  </label>
+  <label>이글 보너스($):
+    <input type="number" id="eagleBonus" value="20" step="1">
+  </label>
+  <label>스킨 값($):
+    <input type="number" id="skinValue" value="2" step="0.5">
+  </label>
+  <button onclick="calcAll()">다시 계산</button>
+  <button onclick="takeScreenshot()">결과 스크린샷</button>
+  <button onclick="toggleFullscreen()">전체 화면</button>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Hole</th>
+      <th>Par</th>
+      <th id="thP0" class="colP0">P1</th>
+      <th id="thP1" class="colP1">P2</th>
+      <th id="thP2" class="colP2">P3</th>
+      <th id="thP3" class="colP3">P4</th>
+      <th id="thP4" class="colP4">P5</th>
+      <th>Rate($/타)</th>
+      <th id="thNetP0" class="colP0">P1 Net</th>
+      <th id="thNetP1" class="colP1">P2 Net</th>
+      <th id="thNetP2" class="colP2">P3 Net</th>
+      <th id="thNetP3" class="colP3">P4 Net</th>
+      <th id="thNetP4" class="colP4">P5 Net</th>
+      <th>이 홀 이동금액(+)</th>
+      <th>Pot Before</th>
+      <th>Pot Used</th>
+      <th>Pot Remain</th>
+      <th>Skin Winner</th>
+    </tr>
+  </thead>
+  <tbody id="bodyRows"></tbody>
+</table>
+
+<table class="totals">
+  <tr>
+    <th></th>
+    <th id="sumP0">P1</th>
+    <th id="sumP1">P2</th>
+    <th id="sumP2">P3</th>
+    <th id="sumP3">P4</th>
+    <th id="sumP4">P5</th>
+  </tr>
+  <tr>
+    <th>머니 합계($)</th>
+    <td id="totalP0"></td>
+    <td id="totalP1"></td>
+    <td id="totalP2"></td>
+    <td id="totalP3"></td>
+    <td id="totalP4"></td>
+  </tr>
+  <tr>
+    <th>타수 합계</th>
+    <td id="strokesP0"></td>
+    <td id="strokesP1"></td>
+    <td id="strokesP2"></td>
+    <td id="strokesP3"></td>
+    <td id="strokesP4"></td>
+  </tr>
+  <tr>
+    <th>파 대비</th>
+    <td id="vsParP0"></td>
+    <td id="vsParP1"></td>
+    <td id="vsParP2"></td>
+    <td id="vsParP3"></td>
+    <td id="vsParP4"></td>
+  </tr>
+</table>
+
+<div class="note">
+  • 위에서 플레이어 수를 2~5명 사이에서 선택할 수 있습니다 (기본 4명).<br>
+  • 선택한 인원 수만 계산에 포함되고, 나머지 칸은 숨겨집니다.<br>
+  • 머니게임 안 하고 스트로크 게임만 할 때는 금액들을 0으로 놓고 “타수 합계 / 파 대비”만 보시면 됩니다.<br>
+  • 숫자를 바꾸거나 스코어를 입력하면 자동으로 다시 계산됩니다.<br>
+</div>
+
+<script>
+  const MAX_PLAYERS = 5;
+  const body = document.getElementById("bodyRows");
+
+  // 행 생성
+  for (let h = 1; h <= 18; h++) {
+    let rowHtml = `<tr>
+        <td>${h}</td>
+        <td><input type="number" id="par_${h}" value="4"></td>`;
+    for (let p = 0; p < MAX_PLAYERS; p++) {
+      rowHtml += `<td class="colP${p}"><input type="number" id="s${p}_${h}"></td>`;
+    }
+    rowHtml += `
+        <td id="rate_${h}"></td>`;
+    for (let p = 0; p < MAX_PLAYERS; p++) {
+      rowHtml += `<td class="colP${p}" id="net${p}_${h}"></td>`;
+    }
+    rowHtml += `
+        <td id="moved_${h}"></td>
+        <td id="potBefore_${h}"></td>
+        <td id="potUsed_${h}"></td>
+        <td id="potRemain_${h}"></td>
+        <td id="skinWinner_${h}"></td>
+      </tr>`;
+    body.innerHTML += rowHtml;
+  }
+
+  function getPlayerCount() {
+    const n = parseInt(document.getElementById("playerCount").value, 10);
+    return Math.min(MAX_PLAYERS, Math.max(2, n || 4));
+  }
+
+  function getNames() {
+    const n = getPlayerCount();
+    const names = [];
+    for (let p = 0; p < n; p++) {
+      const v = document.getElementById("name" + p).value.trim();
+      names.push(v || ("Player " + (p + 1)));
+    }
+    return names;
+  }
+
+  function updateNamesAndVisibility() {
+    const n = getPlayerCount();
+    const names = [];
+    for (let p = 0; p < MAX_PLAYERS; p++) {
+      const v = document.getElementById("name" + p).value.trim();
+      names[p] = v || ("Player " + (p + 1));
+    }
+
+    for (let p = 0; p < MAX_PLAYERS; p++) {
+      const show = (p < n);
+      // 헤더 텍스트
+      const th = document.getElementById("thP" + p);
+      const thNet = document.getElementById("thNetP" + p);
+      const sum = document.getElementById("sumP" + p);
+      if (show) {
+        if (th) th.innerText = names[p];
+        if (thNet) thNet.innerText = names[p] + " Net";
+        if (sum) sum.innerText = names[p];
+      } else {
+        if (th) th.innerText = "";
+        if (thNet) thNet.innerText = "";
+        if (sum) sum.innerText = "";
+      }
+      // 컬럼 show/hide
+      const colCells = document.querySelectorAll(".colP" + p);
+      colCells.forEach(td => {
+        td.style.display = show ? "" : "none";
+      });
+    }
+
+    // 합계 테이블에서도 불필요한 플레이어 칸 숨기기
+    for (let p = 0; p < MAX_PLAYERS; p++) {
+      const show = (p < n);
+      ["totalP", "strokesP", "vsParP"].forEach(prefix => {
+        const cell = document.getElementById(prefix + p);
+        if (cell) cell.style.display = show ? "" : "none";
+      });
+    }
+  }
+
+  ["playerCount","name0","name1","name2","name3","name4"].forEach(id => {
+    document.getElementById(id).addEventListener("input", () => {
+      updateNamesAndVisibility();
+      calcAll();
+    });
+  });
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  function takeScreenshot() {
+    html2canvas(document.getElementById("captureArea")).then(canvas => {
+      const link = document.createElement("a");
+      link.download = "golf_result.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    });
+  }
+
+  function formatVsPar(diff) {
+    if (isNaN(diff)) return "";
+    if (diff === 0) return "E";
+    if (diff > 0) return "+" + diff;
+    return diff.toString();
+  }
+
+  function calcAll() {
+    const baseStake = parseFloat(document.getElementById("baseStake").value) || 0;
+    const rateMult  = parseFloat(document.getElementById("rateMultiplier").value) || 1;
+    const birdieBonus = parseFloat(document.getElementById("birdieBonus").value) || 0;
+    const eagleBonus  = parseFloat(document.getElementById("eagleBonus").value) || 0;
+    const skinValue   = parseFloat(document.getElementById("skinValue").value) || 0;
+    const nPlayers = getPlayerCount();
+
+    let total = new Array(MAX_PLAYERS).fill(0);
+    let strokes = new Array(MAX_PLAYERS).fill(0);
+    let totalPar = 0;
+
+    let prevScores = null, prevPar = null, potRemainPrev = 0;
+
+    const names = getNames();
+
+    for (let h = 1; h <= 18; h++) {
+      const par = parseFloat(document.getElementById('par_' + h).value);
+      if (isNaN(par)) break;
+
+      const scores = [];
+      for (let p = 0; p < nPlayers; p++) {
+        const v = parseFloat(document.getElementById('s' + p + '_' + h).value);
+        scores.push(v);
+      }
+
+      const allScoresFilled = scores.every(v => !isNaN(v));
+      if (!allScoresFilled) break;
+
+      // 스트로크 합계/파 합계 누적
+      for (let p = 0; p < nPlayers; p++) {
+        strokes[p] += scores[p];
+      }
+      totalPar += par;
+
+      // 타당 금액(ratePerStroke) 계산
+      let ratePerStroke = baseStake;
+      if (h === 1) {
+        ratePerStroke = baseStake;
+      } else if (prevScores && prevPar != null) {
+        const hasBirdieOrBetter = prevScores.some(x => x <= prevPar - 1);
+        const hasTripleOrWorse = prevScores.some(x => x >= prevPar + 3);
+        const allSame = prevScores.every(x => x === prevScores[0]);
+        ratePerStroke = (hasBirdieOrBetter || hasTripleOrWorse || allSame)
+          ? baseStake * rateMult
+          : baseStake;
+      }
+      document.getElementById('rate_' + h).innerText = ratePerStroke.toFixed(1);
+
+      // 기본 타수차 Net (머니게임)
+      let net = new Array(nPlayers).fill(0);
+      for (let i = 0; i < nPlayers; i++) {
+        for (let j = i + 1; j < nPlayers; j++) {
+          const diff = (scores[j] - scores[i]) * ratePerStroke;
+          net[i] += diff;
+          net[j] -= diff;
+        }
+      }
+
+      // 버디 보너스 (par-1)
+      const totalBirdies = scores.filter(s => s === par - 1).length;
+      if (totalBirdies > 0 && birdieBonus !== 0) {
+        for (let i = 0; i < nPlayers; i++) {
+          const isBirdie = (scores[i] === par - 1);
+          if (isBirdie) {
+            net[i] += (nPlayers - totalBirdies) * birdieBonus;
+          } else {
+            net[i] -= totalBirdies * birdieBonus;
+          }
+        }
+      }
+
+      // 이글 보너스 (par-2 이하)
+      const totalEagles = scores.filter(s => s <= par - 2).length;
+      if (totalEagles > 0 && eagleBonus !== 0) {
+        for (let i = 0; i < nPlayers; i++) {
+          const isEagle = (scores[i] <= par - 2);
+          if (isEagle) {
+            net[i] += (nPlayers - totalEagles) * eagleBonus;
+          } else {
+            net[i] -= totalEagles * eagleBonus;
+          }
+        }
+      }
+
+      // 스킨 계산 (이월 + 최대 3홀치)
+      const potBefore = potRemainPrev + 1;
+      let potUsed = 0;
+      let potRemain = potBefore;
+      let skinWinnerIdx = -1;
+
+      const minScore = Math.min(...scores);
+      const minIndices = [];
+      for (let i = 0; i < nPlayers; i++) {
+        if (scores[i] === minScore) minIndices.push(i);
+      }
+
+      if (minIndices.length === 1 && minScore <= par && skinValue !== 0) {
+        skinWinnerIdx = minIndices[0];
+        potUsed = Math.min(potBefore, 3);
+        potRemain = potBefore - potUsed;
+
+        for (let i = 0; i < nPlayers; i++) {
+          if (i === skinWinnerIdx) {
+            net[i] += 3 * potUsed * skinValue;
+          } else {
+            net[i] -= potUsed * skinValue;
+          }
+        }
+      } else {
+        potUsed = 0;
+        potRemain = potBefore;
+      }
+      potRemainPrev = potRemain;
+
+      // 이 홀 결과 표시
+      let movedPos = 0;
+      for (let p = 0; p < MAX_PLAYERS; p++) {
+        const cell = document.getElementById('net' + p + '_' + h);
+        if (p < nPlayers) {
+          const v = net[p];
+          cell.innerText = v.toFixed(0);
+          if (v > 0) movedPos += v;
+        } else {
+          cell.innerText = "";
+        }
+      }
+
+      document.getElementById('moved_' + h).innerText = movedPos.toFixed(0);
+      document.getElementById('potBefore_' + h).innerText = potBefore.toFixed(0);
+      document.getElementById('potUsed_' + h).innerText = potUsed.toFixed(0);
+      document.getElementById('potRemain_' + h).innerText = potRemain.toFixed(0);
+      document.getElementById('skinWinner_' + h).innerText =
+        (skinWinnerIdx >= 0 ? names[skinWinnerIdx] : '');
+
+      for (let p = 0; p < nPlayers; p++) {
+        total[p] += net[p];
+      }
+
+      prevScores = scores;
+      prevPar = par;
+    }
+
+    // 머니 합계 & 스트로크 & 파 대비 표시
+    for (let p = 0; p < MAX_PLAYERS; p++) {
+      const tCell = document.getElementById('totalP' + p);
+      const sCell = document.getElementById('strokesP' + p);
+      const vCell = document.getElementById('vsParP' + p);
+      if (p < getPlayerCount()) {
+        tCell.innerText = total[p].toFixed(0);
+        sCell.innerText = strokes[p] ? strokes[p] : "";
+        vCell.innerText = (strokes[p] && totalPar)
+          ? formatVsPar(strokes[p] - totalPar)
+          : "";
+      } else {
+        tCell.innerText = "";
+        sCell.innerText = "";
+        vCell.innerText = "";
+      }
+    }
+  }
+
+  function attachAutoCalc() {
+    const numberInputs = document.querySelectorAll('input[type="number"]');
+    numberInputs.forEach(el => {
+      el.addEventListener('input', calcAll);
+    });
+  }
+
+  attachAutoCalc();
+  updateNamesAndVisibility();
+  calcAll();
+</script>
+
+</body>
+</html>
